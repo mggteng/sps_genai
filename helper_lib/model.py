@@ -96,16 +96,87 @@ class EnhancedCNN(nn.Module):
         return x
 
 
+class VariationalEncoder(nn.Module):
+    """VAE encoder (from Module 5 Practical VAE).
+
+    Three convolution layers, then two fully connected layers that output the
+    mean and log variance of a normal distribution in the latent space.
+    """
+
+    def __init__(self, latent_dim=2):
+        super(VariationalEncoder, self).__init__()
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1)
+        self.flatten = nn.Flatten()
+        self.fc_mu = nn.Linear(128 * 4 * 4, latent_dim)
+        self.fc_logvar = nn.Linear(128 * 4 * 4, latent_dim)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = self.flatten(x)
+        mu = self.fc_mu(x)
+        logvar = self.fc_logvar(x)
+        return mu, logvar
+
+
+class Decoder(nn.Module):
+    """VAE decoder (from Module 5 Practical VAE).
+
+    A fully connected layer followed by three convolutional transpose layers,
+    'reversing' the operations in the encoder.
+    """
+
+    def __init__(self):
+        super(Decoder, self).__init__()
+        self.fc = nn.Linear(2, 128 * 4 * 4)
+        self.convtrans1 = nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.convtrans2 = nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.convtrans3 = nn.ConvTranspose2d(32, 1, kernel_size=3, stride=2, padding=1, output_padding=1)
+
+    def forward(self, x):
+        x = self.fc(x)
+        x = x.view(-1, 128, 4, 4)
+        x = F.relu(self.convtrans1(x))
+        x = F.relu(self.convtrans2(x))
+        x = torch.sigmoid(self.convtrans3(x))
+        return x
+
+
+class VAE(nn.Module):
+    """Variational Autoencoder (from Module 5 Practical VAE)."""
+
+    def __init__(self, encoder, decoder, beta=1.0):
+        super(VAE, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def forward(self, x):
+        mu, logvar = self.encoder(x)
+        z = self.reparameterize(mu, logvar)
+        reconstruction = self.decoder(z)
+        return reconstruction, mu, logvar
+
+
 def get_model(model_name):
-    """Return a new model: one of "FCNN", "CNN", or "EnhancedCNN"."""
+    """Return a new model: one of "FCNN", "CNN", "EnhancedCNN", or "VAE"."""
     if model_name == "FCNN":
         model = MLP()
     elif model_name == "CNN":
         model = SimpleCNN()
     elif model_name == "EnhancedCNN":
         model = EnhancedCNN()
+    elif model_name == "VAE":
+        model = VAE(VariationalEncoder(), Decoder())
     else:
         raise ValueError(
-            f"Unknown model_name '{model_name}'. Choose one of: FCNN, CNN, EnhancedCNN"
+            f"Unknown model_name '{model_name}'. Choose one of: FCNN, CNN, EnhancedCNN, VAE"
         )
     return model

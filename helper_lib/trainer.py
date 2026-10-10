@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from tqdm import tqdm
 
 
@@ -42,6 +43,47 @@ def train_model(model, data_loader, criterion, optimizer, device='cpu', epochs=1
         epoch_loss = running_loss / len(data_loader)
         epoch_accuracy = 100 * running_correct / running_total
         print(f"Epoch {epoch+1}: Loss={epoch_loss:.4f}, Accuracy={epoch_accuracy:.2f}%")
+
+    print("Finished Training")
+    return model
+
+
+# ---------------------------------------------------------------------------
+# Variational Autoencoder (from Module 5 Practical VAE)
+# ---------------------------------------------------------------------------
+
+def vae_loss_function(recon_x, x, mu, logvar):
+    """VAE loss: reconstruction error (BCE) plus KL divergence.
+
+    The KL term pushes the latent distribution toward a standard normal
+    distribution (mean 0, variance 1).
+    """
+    beta = 500
+    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return beta * BCE + KLD
+
+
+def train_vae_model(model, data_loader, criterion, optimizer, device='cpu', epochs=10):
+    """VAE training loop (from Module 5 Practical VAE). Returns the trained model.
+
+    `criterion` is called as criterion(reconstruction, inputs, mu, logvar),
+    for example vae_loss_function above.
+    """
+    model.to(device)
+
+    # Train the model
+    model.train()
+    for epoch in range(epochs):
+        train_loader_with_progress = tqdm(data_loader, desc=f'Epoch {epoch+1}/{epochs}')
+        for data in train_loader_with_progress:
+            inputs = data[0].to(device)
+            optimizer.zero_grad()
+            recon, mu, logvar = model(inputs)
+            loss = criterion(recon, inputs, mu, logvar)
+            loss.backward()
+            optimizer.step()
+            train_loader_with_progress.set_postfix(loss=f'{loss.item():.4f}')
 
     print("Finished Training")
     return model

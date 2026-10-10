@@ -8,6 +8,9 @@ dependencies = [
     "en-core-web-lg",
     "fastapi[standard]>=0.141.1",
     "spacy>=3.8.16",
+    "torch>=2.14.0",
+    "torchvision>=0.29.0",
+    "tqdm>=4.70.1",
 ]
 
 [tool.uv.sources]

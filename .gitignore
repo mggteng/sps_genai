@@ -9,3 +9,8 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# Datasets, checkpoints and saved models (too large for GitHub)
+data/
+checkpoints*/
+*.pth

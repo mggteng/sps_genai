@@ -1,8 +1,9 @@
 from typing import Union
-from fastapi import FastAPI
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from app.bigram_model import BigramModel
 from app.embedding_model import EmbeddingModel
+from app.classifier import CIFAR10Classifier, WEIGHTS_PATH
 
 app = FastAPI()
 
@@ -19,6 +20,10 @@ bigram_model = BigramModel(corpus)
 
 # Word embedding model (spaCy en_core_web_lg) from Module 2 Practical 3
 embedding_model = EmbeddingModel()
+
+# CIFAR-10 image classifier (Assignment 2): the CNN64 model from helper_lib,
+# trained by train_cifar10_cnn64.py. Loaded only if the trained weights exist.
+classifier = CIFAR10Classifier() if WEIGHTS_PATH.exists() else None
 
 class TextGenerationRequest(BaseModel):
     start_word: str
@@ -49,3 +54,18 @@ def get_embedding(request: EmbeddingRequest):
 def get_similarity(request: SimilarityRequest):
     similarity = embedding_model.calculate_similarity(request.word1, request.word2)
     return {"word1": request.word1, "word2": request.word2, "similarity": float(similarity)}
+
+@app.post("/classify")
+async def classify_image(file: UploadFile = File(...)):
+    """Classify an uploaded image into one of the 10 CIFAR-10 classes."""
+    if classifier is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Classifier weights not found. Run train_cifar10_cnn64.py first.",
+        )
+    image_bytes = await file.read()
+    try:
+        result = classifier.predict(image_bytes)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read the uploaded file as an image.")
+    return {"filename": file.filename, **result}

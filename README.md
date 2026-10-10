@@ -4,6 +4,7 @@ FastAPI project for Applied Generative AI (Columbia SPS).
 
 - **Module 3 class activity:** bigram text generation (`/generate`)
 - **Assignment 1:** word embeddings with spaCy `en_core_web_lg` (`/embedding`, `/similarity`)
+- **Assignment 2:** CIFAR-10 image classifier using the CNN64 model from `helper_lib` (`/classify`)
 
 ## Project structure
 
@@ -13,7 +14,12 @@ sps_genai/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI app and endpoints
 │   ├── bigram_model.py      # Bigram model (from Module 2 Practical 2)
-│   └── embedding_model.py   # Word embeddings (from Module 2 Practical 3)
+│   ├── embedding_model.py   # Word embeddings (from Module 2 Practical 3)
+│   ├── classifier.py        # CIFAR-10 classifier (Assignment 2)
+│   └── models/
+│       └── cnn64_cifar10.pth  # Trained CNN64 weights
+├── helper_lib/              # Reusable neural network code (Modules 4 and 5)
+├── train_cifar10_cnn64.py   # Trains CNN64 on CIFAR-10 (Assignment 2)
 ├── Dockerfile
 ├── pyproject.toml
 └── uv.lock
@@ -93,4 +99,49 @@ curl -X POST http://127.0.0.1:8000/similarity \
 
 ```json
 {"word1": "apple", "word2": "car", "similarity": 0.2174709439277649}
+```
+
+### `POST /classify`
+
+Classifies an uploaded image into one of the 10 CIFAR-10 classes (airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck). Any image size works: it is resized to 64x64 before going into the CNN.
+
+```bash
+curl -X POST http://127.0.0.1:8000/classify -F "file=@my_image.jpg"
+```
+
+Example response (the probabilities depend on the image):
+
+```json
+{
+  "filename": "my_image.jpg",
+  "predicted_class": "cat",
+  "top_predictions": [
+    {"class": "cat", "probability": 0.71},
+    {"class": "dog", "probability": 0.18},
+    {"class": "frog", "probability": 0.04}
+  ]
+}
+```
+
+In the `/docs` page, open `POST /classify`, click **Try it out**, and choose an image file.
+
+## Assignment 2: CNN64 model and training
+
+`helper_lib/model.py` defines `CNN64`, which matches the required architecture:
+
+| Layer | Output shape |
+|---|---|
+| Input (RGB) | 3 x 64 x 64 |
+| Conv2D 16 filters, 3x3, stride 1, padding 1 + ReLU | 16 x 64 x 64 |
+| MaxPool 2x2, stride 2 | 16 x 32 x 32 |
+| Conv2D 32 filters, 3x3, stride 1, padding 1 + ReLU | 32 x 32 x 32 |
+| MaxPool 2x2, stride 2 | 32 x 16 x 16 |
+| Flatten | 8192 |
+| Fully connected 100 units + ReLU | 100 |
+| Fully connected 10 units | 10 |
+
+CIFAR-10 images are 32x32, so they are resized to 64x64 to match this architecture. To retrain the model (the trained weights are already included in `app/models/`):
+
+```bash
+uv run python train_cifar10_cnn64.py
 ```

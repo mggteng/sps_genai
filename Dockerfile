@@ -22,8 +22,9 @@ COPY pyproject.toml uv.lock /code/
 # Install dependencies using uv
 RUN uv sync --frozen
 
-# Copy the application code
+# Copy the application code (and helper_lib, which the CIFAR-10 classifier uses)
 COPY ./app /code/app
+COPY ./helper_lib /code/helper_lib
 
 # Command to run the application
 CMD ["uv", "run", "fastapi", "run", "app/main.py", "--port", "80"]

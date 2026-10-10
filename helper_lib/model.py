@@ -96,6 +96,35 @@ class EnhancedCNN(nn.Module):
         return x
 
 
+class CNN64(nn.Module):
+    """CNN for 64x64 RGB images (Assignment 2, Part 1).
+
+    Input:  RGB image 64x64x3
+    Conv2D 16 filters, 3x3, stride 1, padding 1 -> ReLU -> MaxPool 2x2, stride 2
+    Conv2D 32 filters, 3x3, stride 1, padding 1 -> ReLU -> MaxPool 2x2, stride 2
+    Flatten -> Fully connected 100 units -> ReLU -> Fully connected 10 units
+
+    Shapes: 3x64x64 -> 16x64x64 -> 16x32x32 -> 32x32x32 -> 32x16x16
+            -> 8192 -> 100 -> 10
+    """
+
+    def __init__(self, num_classes=10):
+        super(CNN64, self).__init__()
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(32 * 16 * 16, 100)
+        self.fc2 = nn.Linear(100, num_classes)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))  # 3x64x64 -> 16x64x64 -> 16x32x32
+        x = self.pool(F.relu(self.conv2(x)))  # 16x32x32 -> 32x32x32 -> 32x16x16
+        x = x.view(-1, 32 * 16 * 16)          # Flatten: 32x16x16 -> 8192
+        x = F.relu(self.fc1(x))               # 8192 -> 100
+        x = self.fc2(x)                       # 100 -> 10
+        return x
+
+
 class VariationalEncoder(nn.Module):
     """VAE encoder (from Module 5 Practical VAE).
 
@@ -166,17 +195,19 @@ class VAE(nn.Module):
 
 
 def get_model(model_name):
-    """Return a new model: one of "FCNN", "CNN", "EnhancedCNN", or "VAE"."""
+    """Return a new model: one of "FCNN", "CNN", "EnhancedCNN", "CNN64", or "VAE"."""
     if model_name == "FCNN":
         model = MLP()
     elif model_name == "CNN":
         model = SimpleCNN()
     elif model_name == "EnhancedCNN":
         model = EnhancedCNN()
+    elif model_name == "CNN64":
+        model = CNN64()
     elif model_name == "VAE":
         model = VAE(VariationalEncoder(), Decoder())
     else:
         raise ValueError(
-            f"Unknown model_name '{model_name}'. Choose one of: FCNN, CNN, EnhancedCNN, VAE"
+            f"Unknown model_name '{model_name}'. Choose one of: FCNN, CNN, EnhancedCNN, CNN64, VAE"
         )
     return model

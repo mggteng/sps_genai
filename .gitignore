@@ -14,3 +14,5 @@ wheels/
 data/
 checkpoints*/
 *.pth
+# ...except the trained CIFAR-10 classifier, which the API and Docker image need (Assignment 2)
+!app/models/*.pth

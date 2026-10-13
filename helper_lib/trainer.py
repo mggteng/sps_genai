@@ -1,5 +1,8 @@
+import os
+
 import torch
 import torch.nn.functional as F
+from torchvision.utils import make_grid, save_image
 from tqdm import tqdm
 
 
@@ -84,6 +87,102 @@ def train_vae_model(model, data_loader, criterion, optimizer, device='cpu', epoc
             loss.backward()
             optimizer.step()
             train_loader_with_progress.set_postfix(loss=f'{loss.item():.4f}')
+
+    print("Finished Training")
+    return model
+
+
+# ---------------------------------------------------------------------------
+# Wasserstein GAN (from Module 6 Practical GAN)
+# ---------------------------------------------------------------------------
+
+def train_gan(model, data_loader, criterion=None, optimizer=None, device='cpu', epochs=10,
+              n_critic=5, clip_value=0.01, lr=5e-5, sample_dir=None):
+    """WGAN training loop (from Module 6 Practical GAN). Returns the trained model.
+
+    Args:
+        model: a GAN from get_model("GAN") (has .generator, .critic and .z_dim).
+        data_loader: real images scaled to [-1, 1], e.g.
+            get_data_loader('data', dataset="CelebA").
+        criterion: not used. WGAN computes its own Wasserstein loss
+            (critic: -(D(real) - D(fake)), generator: -D(fake)), so pass None.
+            The argument is kept so train_gan has the same signature as the
+            other trainers in helper_lib.
+        optimizer: a tuple (opt_gen, opt_critic), because the generator and
+            the critic are trained separately. If None, two RMSprop optimizers
+            with learning rate `lr` are created, as in the notebook.
+        n_critic: critic updates per generator update (notebook: 5).
+        clip_value: weight clipping range for the critic to keep it Lipschitz
+            (notebook: 0.01).
+        sample_dir: optional folder; if given, a grid of 64 generated images is
+            saved there after every epoch (gan_epoch_001.png, ...).
+    """
+    gen = model.generator.to(device)
+    critic = model.critic.to(device)
+    z_dim = model.z_dim
+
+    if optimizer is None:
+        opt_gen = torch.optim.RMSprop(gen.parameters(), lr=lr)
+        opt_critic = torch.optim.RMSprop(critic.parameters(), lr=lr)
+    else:
+        opt_gen, opt_critic = optimizer
+
+    # Fixed noise so the saved sample grids show the same "faces" improving over time
+    fixed_noise = torch.randn(64, z_dim, 1, 1).to(device)
+
+    for epoch in range(epochs):
+        gen.train()
+        critic.train()
+        train_loader_with_progress = tqdm(
+            iterable=data_loader, ncols=120, desc=f"Epoch {epoch+1}/{epochs}"
+        )
+        for batch_number, (real, _) in enumerate(train_loader_with_progress):
+            real = real.to(device)
+            batch_size = real.size(0)
+
+            ## === Train Critic === ##
+            for _ in range(n_critic):
+                noise = torch.randn(batch_size, z_dim, 1, 1).to(device)
+                fake = gen(noise).detach()
+                critic_real = critic(real).mean()
+                critic_fake = critic(fake).mean()
+                loss_critic = -(critic_real - critic_fake)
+
+                critic.zero_grad()
+                loss_critic.backward()
+                opt_critic.step()
+
+                # Weight clipping
+                for p in critic.parameters():
+                    p.data.clamp_(-clip_value, clip_value)
+
+            ## === Train Generator === ##
+            noise = torch.randn(batch_size, z_dim, 1, 1).to(device)
+            fake = gen(noise)
+            loss_gen = -critic(fake).mean()
+
+            gen.zero_grad()
+            loss_gen.backward()
+            opt_gen.step()
+
+            if batch_number % 100 == 0:
+                train_loader_with_progress.set_postfix(
+                    {
+                        "D loss": f"{loss_critic.item():.4f}",
+                        "G loss": f"{loss_gen.item():.4f}",
+                    }
+                )
+
+        print(f"Epoch {epoch+1}: D loss={loss_critic.item():.4f}, G loss={loss_gen.item():.4f}")
+
+        # Save sample images (the notebook showed them with plt.show() instead)
+        if sample_dir is not None:
+            os.makedirs(sample_dir, exist_ok=True)
+            gen.eval()
+            with torch.no_grad():
+                fake = gen(fixed_noise).detach().cpu()
+            grid = make_grid(fake, normalize=True)
+            save_image(grid, os.path.join(sample_dir, f"gan_epoch_{epoch+1:03d}.png"))
 
     print("Finished Training")
     return model

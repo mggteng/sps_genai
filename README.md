@@ -18,7 +18,8 @@ sps_genai/
 │   ├── classifier.py        # CIFAR-10 classifier (Assignment 2)
 │   └── models/
 │       └── cnn64_cifar10.pth  # Trained CNN64 weights
-├── helper_lib/              # Reusable neural network code (Modules 4 and 5)
+├── helper_lib/              # Reusable neural network code (Modules 4, 5 and 6: CNNs, VAE, GAN)
+├── gan_example.py           # Trains the WGAN on CelebA faces (Module 6 activity)
 ├── train_cifar10_cnn64.py   # Trains CNN64 on CIFAR-10 (Assignment 2)
 ├── Dockerfile
 ├── pyproject.toml

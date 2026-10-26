@@ -8,6 +8,7 @@ dependencies = [
     "en-core-web-lg",
     "fastapi[standard]>=0.141.1",
     "matplotlib>=3.11.2",
+    "scipy>=1.16.0",
     "spacy>=3.8.16",
     "torch>=2.14.0",
     "torchvision>=0.29.0",

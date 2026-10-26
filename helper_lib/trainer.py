@@ -186,3 +186,114 @@ def train_gan(model, data_loader, criterion=None, optimizer=None, device='cpu', 
 
     print("Finished Training")
     return model
+
+
+# ---------------------------------------------------------------------------
+# Diffusion model (from Module 8 Practical 2 - Diffusion Methods)
+# ---------------------------------------------------------------------------
+
+def fit_diffusion_normalizer(model, data_loader, device='cpu', max_batches=50):
+    """Measure the mean and standard deviation of each color channel of the
+    training images, so the diffusion model can scale them to mean 0 and
+    variance 1 (the notebook assumes the images are preprocessed this way)."""
+    total, total_sq, count = 0.0, 0.0, 0
+    for batch_number, (images, _) in enumerate(data_loader):
+        if batch_number >= max_batches:
+            break
+        images = images.to(device)
+        total = total + images.sum(dim=(0, 2, 3))
+        total_sq = total_sq + (images ** 2).sum(dim=(0, 2, 3))
+        count += images.size(0) * images.size(2) * images.size(3)
+    mean = total / count
+    std = (total_sq / count - mean ** 2).clamp(min=1e-8).sqrt()
+    model.set_normalizer(mean, std)
+    print(f"Normalizer: mean={[round(m, 3) for m in mean.tolist()]}, std={[round(s, 3) for s in std.tolist()]}")
+
+
+def train_diffusion(model, data_loader, criterion, optimizer, device='cpu', epochs=10,
+                    val_loader=None, checkpoint_dir=None, sample_dir=None):
+    """Diffusion training loop (from Module 8 Practical 2). Returns the trained model.
+
+    Each step picks a random diffusion time for every image, adds that much
+    noise, and trains the UNet to predict the noise (model.train_step).
+
+    Args:
+        model: a DiffusionModel from get_model("Diffusion").
+        data_loader: training images with pixels in [0, 1], e.g.
+            get_data_loader('data', batch_size=64, dataset="Flowers102").
+        criterion: loss between predicted and real noise, e.g. nn.L1Loss()
+            (mean absolute error, as in the TF reference the notebook follows)
+            or nn.MSELoss(). If None, nn.L1Loss() is used.
+        optimizer: optimizer for model.network, e.g.
+            torch.optim.AdamW(model.network.parameters(), lr=1e-3, weight_decay=1e-4).
+        val_loader: optional validation images; if given, the average
+            validation loss is printed after every epoch (model.test_step).
+        checkpoint_dir: optional folder; if given, a checkpoint is saved after
+            every epoch (diffusion_epoch_001.pth, ...) plus diffusion_best.pth,
+            as in the notebook.
+        sample_dir: optional folder; if given, a grid of generated images is
+            saved after every epoch (the notebook showed them with plt.show()).
+
+    The notebook's version took (train_loader, val_loader, optimizer, loss_fn);
+    here the arguments follow the activity's train_diffusion signature, and
+    val_loader is optional.
+    """
+    if criterion is None:
+        criterion = torch.nn.L1Loss()
+    model.to(device)
+
+    # The images must have mean 0 and variance 1 before noise is added
+    if not bool(model.normalizer_fitted):
+        fit_diffusion_normalizer(model, data_loader, device)
+
+    best_loss = float('inf')
+    for epoch in range(epochs):
+        model.train()
+        train_losses = []
+        loader_with_progress = tqdm(data_loader, ncols=120, desc=f'Epoch {epoch+1}/{epochs} [Train]')
+        for images, _ in loader_with_progress:
+            images = images.to(device)
+            loss = model.train_step(images, optimizer, criterion)
+            train_losses.append(loss)
+            loader_with_progress.set_postfix(loss=f'{loss:.4f}')
+
+        avg_train_loss = sum(train_losses) / len(train_losses)
+        model.eval()
+
+        avg_val_loss = None
+        if val_loader is not None:
+            val_losses = []
+            for images, _ in tqdm(val_loader, ncols=120, desc=f"Epoch {epoch+1} [Val]"):
+                images = images.to(device)
+                val_losses.append(model.test_step(images, criterion))
+            avg_val_loss = sum(val_losses) / len(val_losses)
+            print(f"Epoch {epoch+1} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+        else:
+            print(f"Epoch {epoch+1} | Train Loss: {avg_train_loss:.4f}")
+
+        # Save checkpoint every epoch, and the best one so far (as in the notebook)
+        if checkpoint_dir is not None:
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            checkpoint = {
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),  # UNet, EMA UNet and normalizer
+                'optimizer_state_dict': optimizer.state_dict(),
+                'train_loss': avg_train_loss,
+                'val_loss': avg_val_loss,
+            }
+            checkpoint_path = os.path.join(checkpoint_dir, f'diffusion_epoch_{epoch+1:03d}.pth')
+            torch.save(checkpoint, checkpoint_path)
+            epoch_loss = avg_val_loss if avg_val_loss is not None else avg_train_loss
+            if epoch_loss < best_loss:
+                best_loss = epoch_loss
+                torch.save(checkpoint, os.path.join(checkpoint_dir, 'diffusion_best.pth'))
+                print(f"New best model saved at epoch {epoch+1} with loss: {epoch_loss:.4f}")
+
+        # Save generated samples (the notebook's plot_images used 20 diffusion steps)
+        if sample_dir is not None:
+            os.makedirs(sample_dir, exist_ok=True)
+            samples = model.generate(num_images=18, diffusion_steps=20).cpu()
+            save_image(make_grid(samples, nrow=6), os.path.join(sample_dir, f"diffusion_epoch_{epoch+1:03d}.png"))
+
+    print("Finished Training")
+    return model

@@ -2,7 +2,7 @@ import os
 
 import torch
 from PIL import Image
-from torch.utils.data import Dataset, Subset
+from torch.utils.data import ConcatDataset, Dataset, Subset
 from torchvision import datasets, transforms
 
 # CIFAR-10 class names (from Module 4 Practical 1 and 3)
@@ -39,7 +39,8 @@ class CustomImageDataset(Dataset):
 
 def get_data_loader(data_dir, batch_size=32, train=True, dataset="CIFAR10", image_size=None,
                     subset_size=None):
-    """Create a DataLoader for CIFAR-10 (Module 4), Fashion-MNIST (Module 5) or CelebA (Module 6).
+    """Create a DataLoader for CIFAR-10 (Module 4), Fashion-MNIST (Module 5), CelebA (Module 6)
+    or Oxford Flowers 102 (Module 8).
 
     Args:
         data_dir: folder where the dataset is downloaded/stored.
@@ -50,7 +51,11 @@ def get_data_loader(data_dir, batch_size=32, train=True, dataset="CIFAR10", imag
                  "CelebA" (3x64x64 face images scaled to [-1, 1], used by the GAN;
                  downloaded with torchvision, about 1.4 GB), or
                  "CelebAFolder" (same images from a folder you downloaded yourself;
-                 data_dir is that folder, e.g. "data/img_align_celeba").
+                 data_dir is that folder, e.g. "data/img_align_celeba"), or
+                 "Flowers102" (3x64x64 flower images with pixels in [0, 1], used by
+                 the diffusion model; downloaded with torchvision, about 330 MB.
+                 train=True gives the "train" and "test" splits together, 7,169
+                 images; train=False gives the "val" split, 1,020 images).
         image_size: optional size to resize CIFAR-10 images to, e.g. 64 for the
                     Assignment 2 CNN (CNN64). None keeps the original 32x32.
         subset_size: optional number of images to keep (the first N), for quick
@@ -86,9 +91,24 @@ def get_data_loader(data_dir, batch_size=32, train=True, dataset="CIFAR10", imag
             data = datasets.CelebA(root=data_dir, split=split, download=True, transform=transform)
         else:
             data = CustomImageDataset(root_dir=data_dir, transform=transform)
+    elif dataset == "Flowers102":
+        # Module 8 diffusion: 64x64 color images in [0, 1]. The diffusion model
+        # normalizes them to mean 0 and variance 1 itself (see train_diffusion).
+        transform = transforms.Compose([
+            transforms.Resize(64),
+            transforms.CenterCrop(64),
+            transforms.ToTensor(),
+        ])
+        if train:
+            data = ConcatDataset([
+                datasets.Flowers102(root=data_dir, split=split, download=True, transform=transform)
+                for split in ("train", "test")
+            ])
+        else:
+            data = datasets.Flowers102(root=data_dir, split="val", download=True, transform=transform)
     else:
         raise ValueError(
-            f"Unknown dataset '{dataset}'. Choose CIFAR10, FashionMNIST, CelebA or CelebAFolder"
+            f"Unknown dataset '{dataset}'. Choose CIFAR10, FashionMNIST, CelebA, CelebAFolder or Flowers102"
         )
 
     if subset_size is not None:

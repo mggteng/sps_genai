@@ -18,8 +18,9 @@ sps_genai/
 │   ├── classifier.py        # CIFAR-10 classifier (Assignment 2)
 │   └── models/
 │       └── cnn64_cifar10.pth  # Trained CNN64 weights
-├── helper_lib/              # Reusable neural network code (Modules 4, 5 and 6: CNNs, VAE, GAN)
+├── helper_lib/              # Reusable neural network code (Modules 4, 5, 6 and 8: CNNs, VAE, GAN, diffusion)
 ├── gan_example.py           # Trains the WGAN on CelebA faces (Module 6 activity)
+├── diffusion_example.py     # Trains the diffusion model on Oxford Flowers 102 (Module 8 activity)
 ├── train_cifar10_cnn64.py   # Trains CNN64 on CIFAR-10 (Assignment 2)
 ├── Dockerfile
 ├── pyproject.toml
@@ -146,3 +147,18 @@ CIFAR-10 images are 32x32, so they are resized to 64x64 to match this architectu
 ```bash
 uv run python train_cifar10_cnn64.py
 ```
+
+## Module 8 activity: diffusion model in `helper_lib`
+
+From the Module 8 Practical 2 (Diffusion Methods) notebook:
+
+- `helper_lib/model.py`: `get_model("Diffusion")` returns a `DiffusionModel` that wraps a UNet (residual, down and up blocks with a sinusoidal noise embedding) for 64x64 color images, using the offset cosine diffusion schedule and an EMA copy of the UNet for generation.
+- `helper_lib/trainer.py`: `train_diffusion(model, data_loader, criterion, optimizer, device, epochs)` trains the UNet to predict the noise added to each image and returns the model.
+- `helper_lib/generator.py`: `generate_samples(model, device, num_samples=10, diffusion_steps=100)` starts from standard normal noise, runs the reverse diffusion, and plots the images on a grid.
+- `helper_lib/data_loader.py`: `dataset="Flowers102"` loads Oxford Flowers 102 at 64x64.
+
+```bash
+uv run python diffusion_example.py
+```
+
+Sample grids are saved to `checkpoints/diffusion_samples/` after every epoch.

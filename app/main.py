@@ -1,9 +1,10 @@
 from typing import Union
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
 from app.bigram_model import BigramModel
 from app.embedding_model import EmbeddingModel
 from app.classifier import CIFAR10Classifier, WEIGHTS_PATH
+from app.digit_generator import DigitGenerator, WEIGHTS_PATH as GAN_WEIGHTS_PATH
 
 app = FastAPI()
 
@@ -24,6 +25,10 @@ embedding_model = EmbeddingModel()
 # CIFAR-10 image classifier (Assignment 2): the CNN64 model from helper_lib,
 # trained by train_cifar10_cnn64.py. Loaded only if the trained weights exist.
 classifier = CIFAR10Classifier() if WEIGHTS_PATH.exists() else None
+
+# MNIST digit GAN (Assignment 3): the MNIST_GAN model from helper_lib, trained by
+# train_mnist_gan.py. Loaded only if the trained weights exist.
+digit_generator = DigitGenerator() if GAN_WEIGHTS_PATH.exists() else None
 
 class TextGenerationRequest(BaseModel):
     start_word: str
@@ -69,3 +74,18 @@ async def classify_image(file: UploadFile = File(...)):
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read the uploaded file as an image.")
     return {"filename": file.filename, **result}
+
+@app.get("/generate_digits", response_class=Response,
+         responses={200: {"content": {"image/png": {}}}})
+def generate_digits(
+    num_images: int = Query(16, ge=1, le=64, description="How many digits to generate (1-64)"),
+    seed: Union[int, None] = Query(None, description="Optional random seed, for repeatable output"),
+):
+    """Generate new hand-written digits with the MNIST GAN and return them as a PNG grid."""
+    if digit_generator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="GAN weights not found. Run train_mnist_gan.py first.",
+        )
+    png_bytes = digit_generator.generate(num_images=num_images, seed=seed)
+    return Response(content=png_bytes, media_type="image/png")

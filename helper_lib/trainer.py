@@ -189,6 +189,91 @@ def train_gan(model, data_loader, criterion=None, optimizer=None, device='cpu', 
 
 
 # ---------------------------------------------------------------------------
+# GAN for MNIST hand-written digits (Assignment 3, Part 2)
+# ---------------------------------------------------------------------------
+
+def train_mnist_gan(model, data_loader, criterion=None, optimizer=None, device='cpu', epochs=10,
+                    lr=2e-4, sample_dir=None):
+    """Standard GAN training loop for MNIST digits. Returns the trained model.
+
+    Args:
+        model: an MNISTGAN from get_model("MNIST_GAN").
+        data_loader: MNIST images scaled to [-1, 1], e.g.
+            get_data_loader('data', batch_size=128, dataset="MNIST").
+        criterion: binary cross entropy on the discriminator's scores.
+            If None, nn.BCEWithLogitsLoss() is used (it applies the sigmoid).
+        optimizer: a tuple (opt_gen, opt_disc). If None, two Adam optimizers
+            with learning rate `lr` and betas (0.5, 0.999) are created.
+        sample_dir: optional folder; if given, a grid of 64 generated digits is
+            saved there after every epoch (mnist_gan_epoch_001.png, ...).
+
+    Each step:
+      1. Discriminator: real images get label 1, generated images get label 0.
+      2. Generator: tries to make the discriminator output 1 for generated images.
+    """
+    if criterion is None:
+        criterion = torch.nn.BCEWithLogitsLoss()
+    gen = model.generator.to(device)
+    disc = model.discriminator.to(device)
+    z_dim = model.z_dim
+
+    if optimizer is None:
+        opt_gen = torch.optim.Adam(gen.parameters(), lr=lr, betas=(0.5, 0.999))
+        opt_disc = torch.optim.Adam(disc.parameters(), lr=lr, betas=(0.5, 0.999))
+    else:
+        opt_gen, opt_disc = optimizer
+
+    # Fixed noise so the saved grids show the same digits improving over time
+    fixed_noise = torch.randn(64, z_dim).to(device)
+
+    for epoch in range(epochs):
+        gen.train()
+        disc.train()
+        loader_with_progress = tqdm(data_loader, ncols=120, desc=f"Epoch {epoch+1}/{epochs}")
+        for batch_number, (real, _) in enumerate(loader_with_progress):
+            real = real.to(device)
+            batch_size = real.size(0)
+            real_labels = torch.ones(batch_size, 1, device=device)
+            fake_labels = torch.zeros(batch_size, 1, device=device)
+
+            ## === Train Discriminator === ##
+            noise = torch.randn(batch_size, z_dim, device=device)
+            fake = gen(noise)
+            loss_real = criterion(disc(real), real_labels)
+            loss_fake = criterion(disc(fake.detach()), fake_labels)
+            loss_disc = (loss_real + loss_fake) / 2
+
+            opt_disc.zero_grad()
+            loss_disc.backward()
+            opt_disc.step()
+
+            ## === Train Generator === ##
+            loss_gen = criterion(disc(fake), real_labels)
+
+            opt_gen.zero_grad()
+            loss_gen.backward()
+            opt_gen.step()
+
+            if batch_number % 100 == 0:
+                loader_with_progress.set_postfix(
+                    {"D loss": f"{loss_disc.item():.4f}", "G loss": f"{loss_gen.item():.4f}"}
+                )
+
+        print(f"Epoch {epoch+1}: D loss={loss_disc.item():.4f}, G loss={loss_gen.item():.4f}")
+
+        if sample_dir is not None:
+            os.makedirs(sample_dir, exist_ok=True)
+            gen.eval()
+            with torch.no_grad():
+                fake = gen(fixed_noise).cpu()
+            save_image(make_grid(fake, nrow=8, normalize=True, value_range=(-1, 1)),
+                       os.path.join(sample_dir, f"mnist_gan_epoch_{epoch+1:03d}.png"))
+
+    print("Finished Training")
+    return model
+
+
+# ---------------------------------------------------------------------------
 # Diffusion model (from Module 8 Practical 2 - Diffusion Methods)
 # ---------------------------------------------------------------------------
 

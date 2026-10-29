@@ -51,7 +51,9 @@ def get_data_loader(data_dir, batch_size=32, train=True, dataset="CIFAR10", imag
                  "CelebA" (3x64x64 face images scaled to [-1, 1], used by the GAN;
                  downloaded with torchvision, about 1.4 GB), or
                  "CelebAFolder" (same images from a folder you downloaded yourself;
-                 data_dir is that folder, e.g. "data/img_align_celeba"), or
+                 data_dir is that folder, e.g. "data/img_align_celeba"),
+                 "MNIST" (1x28x28 hand-written digits scaled to [-1, 1], used by
+                 the Assignment 3 GAN), or
                  "Flowers102" (3x64x64 flower images with pixels in [0, 1], used by
                  the diffusion model; downloaded with torchvision, about 330 MB.
                  train=True gives the "train" and "test" splits together, 7,169
@@ -91,6 +93,14 @@ def get_data_loader(data_dir, batch_size=32, train=True, dataset="CIFAR10", imag
             data = datasets.CelebA(root=data_dir, split=split, download=True, transform=transform)
         else:
             data = CustomImageDataset(root_dir=data_dir, transform=transform)
+    elif dataset == "MNIST":
+        # Assignment 3: 28x28 hand-written digits, pixels scaled to [-1, 1]
+        # to match the Tanh output of the MNIST GAN generator
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize([0.5], [0.5]),
+        ])
+        data = datasets.MNIST(root=data_dir, train=train, download=True, transform=transform)
     elif dataset == "Flowers102":
         # Module 8 diffusion: 64x64 color images in [0, 1]. The diffusion model
         # normalizes them to mean 0 and variance 1 itself (see train_diffusion).
@@ -108,7 +118,7 @@ def get_data_loader(data_dir, batch_size=32, train=True, dataset="CIFAR10", imag
             data = datasets.Flowers102(root=data_dir, split="val", download=True, transform=transform)
     else:
         raise ValueError(
-            f"Unknown dataset '{dataset}'. Choose CIFAR10, FashionMNIST, CelebA, CelebAFolder or Flowers102"
+            f"Unknown dataset '{dataset}'. Choose CIFAR10, FashionMNIST, MNIST, CelebA, CelebAFolder or Flowers102"
         )
 
     if subset_size is not None:

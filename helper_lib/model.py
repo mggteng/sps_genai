@@ -297,6 +297,81 @@ class GAN(nn.Module):
 
 
 # ---------------------------------------------------------------------------
+# GAN for MNIST hand-written digits (Assignment 3, Part 1)
+# ---------------------------------------------------------------------------
+
+class MNISTGenerator(nn.Module):
+    """Generator for 28x28 MNIST digits (Assignment 3).
+
+    Input: noise vector of shape (batch size, 100)
+    Fully connected 100 -> 7*7*128, then reshape to 128x7x7
+    ConvTranspose2d 128 -> 64, kernel 4, stride 2, padding 1 -> 64x14x14,
+        then BatchNorm2d and ReLU
+    ConvTranspose2d 64 -> 1, kernel 4, stride 2, padding 1 -> 1x28x28,
+        then Tanh (pixels in [-1, 1])
+    """
+
+    def __init__(self, z_dim=100):
+        super(MNISTGenerator, self).__init__()
+        self.z_dim = z_dim
+        self.fc = nn.Linear(z_dim, 7 * 7 * 128)
+        self.deconv1 = nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.deconv2 = nn.ConvTranspose2d(64, 1, kernel_size=4, stride=2, padding=1)
+
+    def forward(self, z):
+        z = z.view(z.size(0), self.z_dim)    # also accepts noise shaped (B, 100, 1, 1)
+        x = self.fc(z)                        # (B, 100) -> (B, 6272)
+        x = x.view(-1, 128, 7, 7)             # reshape -> (B, 128, 7, 7)
+        x = F.relu(self.bn1(self.deconv1(x)))  # -> (B, 64, 14, 14)
+        x = torch.tanh(self.deconv2(x))       # -> (B, 1, 28, 28)
+        return x
+
+
+class MNISTDiscriminator(nn.Module):
+    """Discriminator for 28x28 MNIST digits (Assignment 3).
+
+    Input: image of shape (1, 28, 28)
+    Conv2d 1 -> 64, kernel 4, stride 2, padding 1 -> 64x14x14, then LeakyReLU(0.2)
+    Conv2d 64 -> 128, kernel 4, stride 2, padding 1 -> 128x7x7,
+        then BatchNorm2d and LeakyReLU(0.2)
+    Flatten -> Linear 6272 -> 1
+
+    The output is one score per image (a logit). sigmoid(score) is the
+    probability that the image is real; the sigmoid is applied inside the loss
+    (nn.BCEWithLogitsLoss), which is the numerically stable way to train it.
+    """
+
+    def __init__(self):
+        super(MNISTDiscriminator, self).__init__()
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=4, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1)
+        self.bn2 = nn.BatchNorm2d(128)
+        self.flatten = nn.Flatten()
+        self.fc = nn.Linear(128 * 7 * 7, 1)
+
+    def forward(self, x):
+        x = F.leaky_relu(self.conv1(x), 0.2)            # (B, 1, 28, 28) -> (B, 64, 14, 14)
+        x = F.leaky_relu(self.bn2(self.conv2(x)), 0.2)  # -> (B, 128, 7, 7)
+        x = self.flatten(x)                              # -> (B, 6272)
+        return self.fc(x)                                # -> (B, 1)
+
+
+class MNISTGAN(nn.Module):
+    """Generator and discriminator together, so get_model("MNIST_GAN") returns one model.
+    Calling the MNISTGAN on noise runs the generator."""
+
+    def __init__(self, z_dim=100):
+        super(MNISTGAN, self).__init__()
+        self.z_dim = z_dim
+        self.generator = MNISTGenerator(z_dim)
+        self.discriminator = MNISTDiscriminator()
+
+    def forward(self, z):
+        return self.generator(z)
+
+
+# ---------------------------------------------------------------------------
 # Diffusion model (from Module 8 Practical 2 - Diffusion Methods)
 # ---------------------------------------------------------------------------
 
@@ -590,7 +665,7 @@ class DiffusionModel(nn.Module):
 
 
 def get_model(model_name):
-    """Return a new model: one of "FCNN", "CNN", "EnhancedCNN", "CNN64", "VAE", "GAN", or "Diffusion".
+    """Return a new model: one of "FCNN", "CNN", "EnhancedCNN", "CNN64", "VAE", "GAN", "MNIST_GAN", or "Diffusion".
 
     "Diffusion" is a UNet for 64x64 RGB images wrapped in a DiffusionModel with
     the offset cosine diffusion schedule (Module 8 Practical 2).
@@ -607,11 +682,13 @@ def get_model(model_name):
         model = VAE(VariationalEncoder(), Decoder())
     elif model_name == "GAN":
         model = GAN(z_dim=100)
+    elif model_name == "MNIST_GAN":
+        model = MNISTGAN(z_dim=100)
     elif model_name == "Diffusion":
         unet = UNet(image_size=64, num_channels=3)
         model = DiffusionModel(unet, offset_cosine_diffusion_schedule)
     else:
         raise ValueError(
-            f"Unknown model_name '{model_name}'. Choose one of: FCNN, CNN, EnhancedCNN, CNN64, VAE, GAN, Diffusion"
+            f"Unknown model_name '{model_name}'. Choose one of: FCNN, CNN, EnhancedCNN, CNN64, VAE, GAN, MNIST_GAN, Diffusion"
         )
     return model

@@ -11,7 +11,8 @@ def generate_samples(model, device, num_samples=10, diffusion_steps=100, latent_
       normal distribution in the 2-D latent space and runs the decoder.
     - GAN (Module 6 Practical GAN): samples `num_samples` random noise vectors of
       size model.z_dim (100) and runs the generator. `latent_dim` is ignored
-      because the GAN knows its own latent size.
+      because the GAN knows its own latent size. The same code works for the
+      MNIST GAN (Assignment 3), which makes 1x28x28 grayscale digits.
     - Diffusion (Module 8 Practical 2): samples `num_samples` images of pure
       noise from a standard normal distribution and runs the reverse diffusion
       for `diffusion_steps` steps (more steps: slower but cleaner images).
@@ -47,7 +48,7 @@ def generate_samples(model, device, num_samples=10, diffusion_steps=100, latent_
     _fig, _axes = plt.subplots(rows, cols, figsize=(2 * cols, 2 * rows), squeeze=False)
     for _i, _ax in enumerate(_axes.flat):
         if _i < num_samples:
-            if is_color:
+            if is_color and samples.size(1) == 3:
                 # imshow needs height x width x channels for color images
                 _ax.imshow(samples[_i].permute(1, 2, 0).numpy())
             else:

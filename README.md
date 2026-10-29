@@ -5,6 +5,7 @@ FastAPI project for Applied Generative AI (Columbia SPS).
 - **Module 3 class activity:** bigram text generation (`/generate`)
 - **Assignment 1:** word embeddings with spaCy `en_core_web_lg` (`/embedding`, `/similarity`)
 - **Assignment 2:** CIFAR-10 image classifier using the CNN64 model from `helper_lib` (`/classify`)
+- **Assignment 3:** GAN that generates hand-written MNIST digits, using the MNIST_GAN model from `helper_lib` (`/generate_digits`)
 
 ## Project structure
 
@@ -16,12 +17,15 @@ sps_genai/
 │   ├── bigram_model.py      # Bigram model (from Module 2 Practical 2)
 │   ├── embedding_model.py   # Word embeddings (from Module 2 Practical 3)
 │   ├── classifier.py        # CIFAR-10 classifier (Assignment 2)
+│   ├── digit_generator.py   # MNIST digit generator (Assignment 3)
 │   └── models/
-│       └── cnn64_cifar10.pth  # Trained CNN64 weights
+│       ├── cnn64_cifar10.pth  # Trained CNN64 weights
+│       └── gan_mnist.pth      # Trained MNIST GAN weights
 ├── helper_lib/              # Reusable neural network code (Modules 4, 5, 6 and 8: CNNs, VAE, GAN, diffusion)
 ├── gan_example.py           # Trains the WGAN on CelebA faces (Module 6 activity)
 ├── diffusion_example.py     # Trains the diffusion model on Oxford Flowers 102 (Module 8 activity)
 ├── train_cifar10_cnn64.py   # Trains CNN64 on CIFAR-10 (Assignment 2)
+├── train_mnist_gan.py       # Trains the MNIST GAN (Assignment 3)
 ├── Dockerfile
 ├── pyproject.toml
 └── uv.lock
@@ -127,6 +131,21 @@ Example response (the probabilities depend on the image):
 
 In the `/docs` page, open `POST /classify`, click **Try it out**, and choose an image file.
 
+### `GET /generate_digits`
+
+Generates new hand-written digits with the MNIST GAN (Assignment 3) and returns them as a PNG grid.
+
+| Query parameter | Default | Meaning |
+|---|---|---|
+| `num_images` | 16 | How many digits to generate (1 to 64) |
+| `seed` | none | Optional random seed; the same seed always gives the same digits |
+
+```bash
+curl "http://127.0.0.1:8000/generate_digits?num_images=16&seed=7" --output digits.png
+```
+
+You can also open http://127.0.0.1:8000/generate_digits?num_images=16 directly in a browser, or use **Try it out** in `/docs`.
+
 ## Assignment 2: CNN64 model and training
 
 `helper_lib/model.py` defines `CNN64`, which matches the required architecture:
@@ -146,6 +165,34 @@ CIFAR-10 images are 32x32, so they are resized to 64x64 to match this architectu
 
 ```bash
 uv run python train_cifar10_cnn64.py
+```
+
+## Assignment 3: MNIST GAN and training
+
+`helper_lib/model.py` defines `MNISTGenerator` and `MNISTDiscriminator` (wrapped together as `MNISTGAN`, available through `get_model("MNIST_GAN")`), matching the required architecture:
+
+**Generator**
+
+| Layer | Output shape |
+|---|---|
+| Input: noise vector | 100 |
+| Fully connected to 7×7×128, then reshape | 128 × 7 × 7 |
+| ConvTranspose2D 128 → 64, kernel 4, stride 2, padding 1 + BatchNorm2D + ReLU | 64 × 14 × 14 |
+| ConvTranspose2D 64 → 1, kernel 4, stride 2, padding 1 + Tanh | 1 × 28 × 28 |
+
+**Discriminator**
+
+| Layer | Output shape |
+|---|---|
+| Input: image | 1 × 28 × 28 |
+| Conv2D 1 → 64, kernel 4, stride 2, padding 1 + LeakyReLU(0.2) | 64 × 14 × 14 |
+| Conv2D 64 → 128, kernel 4, stride 2, padding 1 + BatchNorm2D + LeakyReLU(0.2) | 128 × 7 × 7 |
+| Flatten + Linear | 1 (real/fake score; sigmoid gives the probability) |
+
+The GAN is trained on MNIST with binary cross entropy and Adam (`helper_lib/trainer.py`, `train_mnist_gan`). To retrain it (the trained weights are already included in `app/models/`):
+
+```bash
+uv run python train_mnist_gan.py
 ```
 
 ## Module 8 activity: diffusion model in `helper_lib`
